@@ -12,12 +12,14 @@ type Configuration struct {
 	Listen       string // a host:port combination to bind to
 	BasePort     int    // The base port number to start at
 	MaxInstances int    // No more than this many instances can be made
+	ProxyFormat  string
 }
 
 func ReadConfig() *Configuration {
 	config := &Configuration{}
 	configFile := flag.String("config", "", "JSON Config file to parse")
 	listen := flag.String("listen", "", "Listen on host:port")
+	flag.StringVar(&config.ProxyFormat, "proxy_format", "http://127.0.0.1:{{.Port}}", "Proxy template")
 
 	flag.Parse()
 

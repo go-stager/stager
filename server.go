@@ -5,14 +5,20 @@ import (
 )
 
 func Serve(config *Configuration) {
-	handler := buildHandler(config)
+	backends := newBackendManager(config)
+	handler := buildHandler(backends)
 	http.ListenAndServe(config.Listen, handler)
 }
 
-func buildHandler(config *Configuration) http.HandlerFunc {
-	backends := newBackendManager(config)
+func buildHandler(backends *backendManager) http.HandlerFunc {
 
 	return func(writer http.ResponseWriter, request *http.Request) {
-		backends.get(request.Host).proxy.ServeHTTP(writer, request)
+		backend := backends.get(request.Host)
+		if backend.running {
+			backend.proxy.ServeHTTP(writer, request)
+		} else {
+			writer.WriteHeader(200)
+			writer.Write([]byte("The backend you requested is still loading. Check back momentarily."))
+		}
 	}
 }
