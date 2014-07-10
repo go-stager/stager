@@ -22,11 +22,11 @@ func (b *Backend) initialize() {
 }
 
 type backendManager struct {
+	sync.Mutex
 	backends     map[string]*Backend
 	suffixLength int
 	currentPort  int
 	availPorts   []int
-	lockPorts    sync.Mutex
 	proxyPrefix  *template.Template
 }
 
@@ -61,8 +61,8 @@ func (m *backendManager) get(domain string) *Backend {
 
 /* Allocate a port number to be used for another backend. */
 func (m *backendManager) allocatePort() int {
-	m.lockPorts.Lock()
-	defer m.lockPorts.Unlock()
+	m.Lock()
+	defer m.Unlock()
 	l := len(m.availPorts)
 	if l > 0 {
 		port := m.availPorts[l-1]
@@ -77,9 +77,9 @@ func (m *backendManager) allocatePort() int {
 
 /* Return a port number to the available ports slice */
 func (m *backendManager) returnPort(portNum int) {
-	m.lockPorts.Lock()
+	m.Lock()
 	m.availPorts = append(m.availPorts, portNum)
-	m.lockPorts.Unlock()
+	m.Unlock()
 }
 
 func newBackendManager(config *Configuration) *backendManager {
