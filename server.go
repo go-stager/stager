@@ -2,6 +2,7 @@ package stager
 
 import (
 	"net/http"
+	"time"
 )
 
 func Serve(config *Configuration) {
@@ -27,6 +28,7 @@ func buildHandler(backends *backendManager) http.HandlerFunc {
 			writer.WriteHeader(200)
 			writer.Write([]byte("The backend you requested is starting up. Check back momentarily."))
 		case StateRunning:
+			backend.LastReq = time.Now()
 			backend.proxy.ServeHTTP(writer, request)
 		case StateFinished:
 			writer.WriteHeader(200)

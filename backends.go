@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
@@ -18,6 +19,8 @@ import (
 type Backend struct {
 	Port    int
 	Name    string
+	LastReq time.Time
+	url     *url.URL
 	proxy   *httputil.ReverseProxy
 	state   State
 	command *exec.Cmd
@@ -51,8 +54,17 @@ func (b *Backend) transition(state State) {
 
 // waiter runs in a goroutine waiting for process to end.
 func (b *Backend) waiter() {
-	// This is a little hack to temporarily flip the running state.
-	time.Sleep(10 * time.Second)
+	for b.state == StateStarted {
+		time.Sleep(300 * time.Millisecond)
+		resp, err := http.Head(b.url.String())
+		if err != nil {
+			fmt.Printf("Backend %s didn't connect yet")
+		} else if resp.StatusCode >= 500 {
+			fmt.Printf("Backend got a ")
+		} else {
+			b.transition(StateRunning)
+		}
+	}
 	b.transition(StateRunning)
 	b.command.Wait()
 	b.transition(StateFinished)
@@ -96,13 +108,13 @@ func (m *backendManager) get(domain string) (b *Backend, err error) {
 			return
 		}
 		rawurl := string(buf.Bytes())
-		u, err := url.Parse(rawurl)
+		b.url, err = url.Parse(rawurl)
 		if err != nil {
-			return nil, err
+			return
 		}
 		fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
 
-		b.proxy = httputil.NewSingleHostReverseProxy(u)
+		b.proxy = httputil.NewSingleHostReverseProxy(b.url)
 
 		go b.initialize(m.initCommand)
 
