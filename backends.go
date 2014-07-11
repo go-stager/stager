@@ -44,6 +44,7 @@ func (b *Backend) initialize(command []string) {
 	}
 	b.command = cmd
 	b.transition(StateStarted)
+	go b.startCheck()
 	go b.waiter()
 }
 
@@ -52,10 +53,12 @@ func (b *Backend) transition(state State) {
 	b.notify <- b
 }
 
-// waiter runs in a goroutine waiting for process to end.
-func (b *Backend) waiter() {
-	for b.state == StateStarted {
-		time.Sleep(300 * time.Millisecond)
+// startCheck makes sure we started properly.
+// It does this by sending a HEAD request periodically until we get a
+// response that's not a 5xx response.
+func (b *Backend) startCheck() {
+	time.Sleep(BackendCheckDelay)
+	for a := 0; b.state == StateStarted && a < BackendCheckAttempts; a++ {
 		resp, err := http.Head(b.url.String())
 		if err != nil {
 			fmt.Printf("Backend %s didn't connect yet\n", b.Name)
@@ -64,11 +67,16 @@ func (b *Backend) waiter() {
 		} else {
 			b.transition(StateRunning)
 		}
+		time.Sleep(BackendCheckDelay)
 	}
+}
+
+// waiter runs in a goroutine waiting for process to end.
+func (b *Backend) waiter() {
 	b.command.Wait()
-	b.transition(StateFinished)
-	b.command = nil
 	fmt.Printf("Backend %s on port %d exited.\n", b.Name, b.Port)
+	b.command = nil
+	b.transition(StateFinished)
 }
 
 // backendManager manages backends, allocating ports and backends as needed.
