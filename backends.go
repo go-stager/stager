@@ -186,7 +186,7 @@ func (m *backendManager) watcher() {
 			m.Lock()
 			for _, backend := range m.backends {
 				if time.Since(backend.LastReq) > threshold {
-					fmt.Printf("Killing idle worker %s", backend.Name)
+					fmt.Printf("Killing idle worker %s\n", backend.Name)
 					go backend.kill()
 				}
 			}
