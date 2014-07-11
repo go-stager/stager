@@ -93,12 +93,12 @@ func (m *backendManager) get(domain string) (b *Backend, err error) {
 		buf := &bytes.Buffer{}
 		err = m.proxyPrefix.Execute(buf, b)
 		if err != nil {
-			panic(err)
+			return
 		}
 		rawurl := string(buf.Bytes())
 		u, err := url.Parse(rawurl)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
 
