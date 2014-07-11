@@ -56,6 +56,7 @@ type backendManager struct {
 	backends     map[string]*Backend
 	suffixLength int
 	currentPort  int
+	maxPort      int
 	availPorts   []int
 	proxyPrefix  *template.Template
 	initCommand  []string
@@ -118,6 +119,7 @@ func newBackendManager(config *Configuration) *backendManager {
 		backends:     make(map[string]*Backend),
 		suffixLength: len(config.DomainSuffix),
 		currentPort:  config.BasePort,
+		maxPort:      config.BasePort + config.MaxInstances,
 		proxyPrefix:  template.Must(template.New("p").Parse(config.ProxyFormat)),
 		initCommand:  config.InitCommand,
 	}

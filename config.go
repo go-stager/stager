@@ -21,6 +21,8 @@ func ReadConfig() *Configuration {
 	configFile := flag.String("config", "", "JSON Config file to parse")
 	listen := flag.String("listen", "", "Listen on host:port")
 	flag.StringVar(&config.ProxyFormat, "proxy_format", "http://127.0.0.1:{{.Port}}", "Proxy template")
+	flag.IntVar(&config.BasePort, "base_port", 4200, "Base port num for instances")
+	flag.IntVar(&config.MaxInstances, "max_instances", 100, "Maximum Instances")
 
 	flag.Parse()
 
