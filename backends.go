@@ -58,9 +58,9 @@ func (b *Backend) waiter() {
 		time.Sleep(300 * time.Millisecond)
 		resp, err := http.Head(b.url.String())
 		if err != nil {
-			fmt.Printf("Backend %s didn't connect yet")
+			fmt.Printf("Backend %s didn't connect yet", b.Name)
 		} else if resp.StatusCode >= 500 {
-			fmt.Printf("Backend got a ")
+			fmt.Printf("Backend %s got a >5xx status code", b.Name)
 		} else {
 			b.transition(StateRunning)
 		}
