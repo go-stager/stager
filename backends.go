@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sync"
 	"text/template"
+	"time"
 )
 
 // A backend represents one possible instance we can be proxying to.
@@ -17,8 +18,9 @@ type Backend struct {
 	Port    int
 	Name    string
 	proxy   *httputil.ReverseProxy
-	running bool
+	state   State
 	command *exec.Cmd
+	notify  chan *Backend
 }
 
 // initialize starts the backend running.
@@ -37,15 +39,23 @@ func (b *Backend) initialize(command []string) {
 		panic(err)
 	}
 	b.command = cmd
-	b.running = true
+	b.transition(StateStarted)
 	go b.waiter()
+}
+
+func (b *Backend) transition(state State) {
+	b.state = state
+	b.notify <- b
 }
 
 // waiter runs in a goroutine waiting for process to end.
 func (b *Backend) waiter() {
+	// This is a little hack to temporarily flip the running state.
+	time.Sleep(10 * time.Second)
+	b.transition(StateRunning)
 	b.command.Wait()
+	b.transition(StateFinished)
 	b.command = nil
-	b.running = false
 	fmt.Printf("Backend %s on port %d exited.\n", b.Name, b.Port)
 }
 
@@ -60,6 +70,7 @@ type backendManager struct {
 	availPorts   []int
 	proxyPrefix  *template.Template
 	initCommand  []string
+	notify       chan *Backend
 }
 
 func (m *backendManager) get(domain string) *Backend {
@@ -67,8 +78,9 @@ func (m *backendManager) get(domain string) *Backend {
 	if m.backends[name] == nil {
 		port := m.allocatePort()
 		b := &Backend{
-			Port: port,
-			Name: name,
+			Port:   port,
+			Name:   name,
+			notify: m.notify,
 		}
 		m.backends[name] = b
 		buf := &bytes.Buffer{}
@@ -107,11 +119,26 @@ func (m *backendManager) allocatePort() int {
 	}
 }
 
-/* Return a port number to the available ports slice */
+// Return a port number to the available ports slice
 func (m *backendManager) returnPort(portNum int) {
 	m.Lock()
 	m.availPorts = append(m.availPorts, portNum)
 	m.Unlock()
+}
+
+// watcher watches on the channel for things which happen
+func (m *backendManager) watcher() {
+	for backend := range m.notify {
+		if backend.state == StateFinished {
+			fmt.Printf("Got state finished transition")
+			m.Lock()
+			delete(m.backends, backend.Name)
+			m.Unlock()
+			m.returnPort(backend.Port)
+		} else {
+			fmt.Printf("Backend %s, state %d", backend.Name, backend.state)
+		}
+	}
 }
 
 func newBackendManager(config *Configuration) *backendManager {
@@ -122,6 +149,8 @@ func newBackendManager(config *Configuration) *backendManager {
 		maxPort:      config.BasePort + config.MaxInstances,
 		proxyPrefix:  template.Must(template.New("p").Parse(config.ProxyFormat)),
 		initCommand:  config.InitCommand,
+		notify:       make(chan *Backend),
 	}
+	go manager.watcher()
 	return manager
 }
