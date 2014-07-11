@@ -7,4 +7,5 @@ const (
 	StateStarted
 	StateRunning
 	StateFinished
+	StateReaped
 )

@@ -135,6 +135,7 @@ func (m *backendManager) returnPort(portNum int) {
 func (m *backendManager) watcher() {
 	for backend := range m.notify {
 		if backend.state == StateFinished {
+			backend.state = StateReaped
 			fmt.Printf("Got state finished transition\n")
 			m.Lock()
 			delete(m.backends, backend.Name)
