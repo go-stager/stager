@@ -18,4 +18,5 @@ const (
 const (
 	BackendCheckDelay    = 200 * time.Millisecond
 	BackendCheckAttempts = 100
+	BackendIdleCheck     = 10 * time.Second
 )

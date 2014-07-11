@@ -25,6 +25,7 @@ func buildHandler(backends *backendManager) http.HandlerFunc {
 			writer.WriteHeader(200)
 			writer.Write([]byte("The backend you requested is being built. Check back momentarily."))
 		case StateStarted:
+			backend.LastReq = time.Now()
 			writer.WriteHeader(200)
 			writer.Write([]byte("The backend you requested is starting up. Check back momentarily."))
 		case StateRunning:

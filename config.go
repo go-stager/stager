@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 )
 
 type Configuration struct {
@@ -14,6 +15,15 @@ type Configuration struct {
 	MaxInstances int    // No more than this many instances can be made
 	ProxyFormat  string
 	InitCommand  []string // The command we run to initialize backends
+	IdleTime     string   // Time in seconds after which an idle process is killed.
+}
+
+func (c Configuration) IdleTimeDuration() time.Duration {
+	d, err := time.ParseDuration(c.IdleTime)
+	if err != nil {
+		panic(err)
+	}
+	return d
 }
 
 func ReadConfig() *Configuration {
@@ -23,6 +33,7 @@ func ReadConfig() *Configuration {
 	flag.StringVar(&config.ProxyFormat, "proxy_format", "http://127.0.0.1:{{.Port}}", "Proxy template")
 	flag.IntVar(&config.BasePort, "base_port", 4200, "Base port num for instances")
 	flag.IntVar(&config.MaxInstances, "max_instances", 100, "Maximum Instances")
+	flag.StringVar(&config.IdleTime, "idle_time", "300s", "Idle time (duration)")
 
 	flag.Parse()
 

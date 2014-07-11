@@ -83,15 +83,25 @@ func (b *Backend) waiter() {
 	b.transition(StateFinished)
 }
 
+// kill the running process
+func (b *Backend) kill() {
+	if b.state == StateStarted || b.state == StateRunning {
+		proc := b.command.Process
+		if proc != nil {
+			proc.Signal(os.Interrupt)
+		}
+	}
+}
+
 // backendManager manages backends, allocating ports and backends as needed.
 // Use the function newBackendManager to initialize properly.
 type backendManager struct {
 	sync.Mutex
+	config       *Configuration
 	backends     map[string]*Backend
 	suffixLength int
 	availPorts   []int
 	proxyPrefix  *template.Template
-	initCommand  []string
 	notify       chan *Backend
 }
 
@@ -106,9 +116,10 @@ func (m *backendManager) get(domain string) (b *Backend, err error) {
 		}
 		m.Lock()
 		b = &Backend{
-			Name:   name,
-			Port:   port,
-			notify: m.notify,
+			Name:    name,
+			Port:    port,
+			LastReq: time.Now(),
+			notify:  m.notify,
 		}
 		m.backends[name] = b
 		m.Unlock()
@@ -127,7 +138,7 @@ func (m *backendManager) get(domain string) (b *Backend, err error) {
 
 		b.proxy = httputil.NewSingleHostReverseProxy(b.url)
 
-		go b.initialize(m.initCommand)
+		go b.initialize(m.config.InitCommand)
 
 	}
 	return
@@ -156,16 +167,30 @@ func (m *backendManager) returnPort(portNum int) {
 
 // watcher watches on the channel for things which happen
 func (m *backendManager) watcher() {
-	for backend := range m.notify {
-		if backend.state == StateFinished {
-			backend.state = StateReaped
-			fmt.Printf("Got state finished transition\n")
+	tick := time.Tick(BackendIdleCheck)
+	for {
+		select {
+		case backend := <-m.notify:
+			if backend.state == StateFinished {
+				backend.state = StateReaped
+				fmt.Printf("Backend %s, state finished\n", backend.Name)
+				m.Lock()
+				delete(m.backends, backend.Name)
+				m.Unlock()
+				m.returnPort(backend.Port)
+			} else {
+				fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
+			}
+		case <-tick:
+			threshold := m.config.IdleTimeDuration()
 			m.Lock()
-			delete(m.backends, backend.Name)
+			for _, backend := range m.backends {
+				if time.Since(backend.LastReq) > threshold {
+					fmt.Printf("Killing idle worker %s", backend.Name)
+					go backend.kill()
+				}
+			}
 			m.Unlock()
-			m.returnPort(backend.Port)
-		} else {
-			fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
 		}
 	}
 }
@@ -178,11 +203,11 @@ func newBackendManager(config *Configuration) *backendManager {
 	}
 
 	manager := &backendManager{
+		config:       config,
 		backends:     make(map[string]*Backend),
 		suffixLength: len(config.DomainSuffix),
 		availPorts:   ports,
 		proxyPrefix:  template.Must(template.New("p").Parse(config.ProxyFormat)),
-		initCommand:  config.InitCommand,
 		notify:       make(chan *Backend),
 	}
 	go manager.watcher()
