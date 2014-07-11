@@ -33,6 +33,9 @@ func buildHandler(backends *backendManager) http.HandlerFunc {
 		case StateFinished:
 			writer.WriteHeader(200)
 			writer.Write([]byte("The backend you requested is starting up. Check back momentarily."))
+		case StateErrored:
+			writer.WriteHeader(200)
+			writer.Write([]byte("The backend errored after startup. Check your log for reason code."))
 		}
 	}
 }

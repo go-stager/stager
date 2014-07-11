@@ -73,7 +73,11 @@ func (b *Backend) startCheck() {
 
 // waiter runs in a goroutine waiting for process to end.
 func (b *Backend) waiter() {
-	b.command.Wait()
+	err := b.command.Wait()
+	if err != nil {
+		b.transition(StateErrored)
+		time.Sleep(5 * time.Second)
+	}
 	fmt.Printf("Backend %s on port %d exited.\n", b.Name, b.Port)
 	b.command = nil
 	b.transition(StateFinished)

@@ -12,6 +12,7 @@ const (
 	StateRunning
 	StateFinished
 	StateReaped
+	StateErrored
 )
 
 const (
