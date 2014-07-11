@@ -13,7 +13,11 @@ func Serve(config *Configuration) {
 func buildHandler(backends *backendManager) http.HandlerFunc {
 
 	return func(writer http.ResponseWriter, request *http.Request) {
-		backend := backends.get(request.Host)
+		backend, err := backends.get(request.Host)
+		if err != nil {
+			writer.WriteHeader(500)
+			writer.Write([]byte("Got an internal error finding a backend: " + err.Error()))
+		}
 		switch backend.state {
 		case StateNew:
 			writer.WriteHeader(200)

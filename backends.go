@@ -2,6 +2,7 @@ package stager
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http/httputil"
 	"net/url"
@@ -65,26 +66,32 @@ type backendManager struct {
 	sync.Mutex
 	backends     map[string]*Backend
 	suffixLength int
-	currentPort  int
-	maxPort      int
 	availPorts   []int
 	proxyPrefix  *template.Template
 	initCommand  []string
 	notify       chan *Backend
 }
 
-func (m *backendManager) get(domain string) *Backend {
+func (m *backendManager) get(domain string) (b *Backend, err error) {
 	name := domain[:len(domain)-m.suffixLength]
-	if m.backends[name] == nil {
-		port := m.allocatePort()
-		b := &Backend{
-			Port:   port,
+	b = m.backends[name]
+	if b == nil {
+		var port int
+		port, err = m.allocatePort()
+		if err != nil {
+			return
+		}
+		m.Lock()
+		b = &Backend{
 			Name:   name,
+			Port:   port,
 			notify: m.notify,
 		}
 		m.backends[name] = b
+		m.Unlock()
+
 		buf := &bytes.Buffer{}
-		err := m.proxyPrefix.Execute(buf, b)
+		err = m.proxyPrefix.Execute(buf, b)
 		if err != nil {
 			panic(err)
 		}
@@ -93,29 +100,27 @@ func (m *backendManager) get(domain string) *Backend {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("making new instance %s on port %d with backend url %s\n", name, port, rawurl)
+		fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
 
 		b.proxy = httputil.NewSingleHostReverseProxy(u)
 
 		go b.initialize(m.initCommand)
 
 	}
-	return m.backends[name]
+	return
 }
 
 /* Allocate a port number to be used for another backend. */
-func (m *backendManager) allocatePort() int {
+func (m *backendManager) allocatePort() (int, error) {
 	m.Lock()
 	defer m.Unlock()
 	l := len(m.availPorts)
 	if l > 0 {
 		port := m.availPorts[l-1]
 		m.availPorts = m.availPorts[:l-1]
-		return port
+		return port, nil
 	} else {
-		port := m.currentPort
-		m.currentPort += 1
-		return port
+		return 0, errors.New("Not enough ports remain")
 	}
 }
 
@@ -130,23 +135,28 @@ func (m *backendManager) returnPort(portNum int) {
 func (m *backendManager) watcher() {
 	for backend := range m.notify {
 		if backend.state == StateFinished {
-			fmt.Printf("Got state finished transition")
+			fmt.Printf("Got state finished transition\n")
 			m.Lock()
 			delete(m.backends, backend.Name)
 			m.Unlock()
 			m.returnPort(backend.Port)
 		} else {
-			fmt.Printf("Backend %s, state %d", backend.Name, backend.state)
+			fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
 		}
 	}
 }
 
 func newBackendManager(config *Configuration) *backendManager {
+	// Make a slice of all available ports
+	ports := make([]int, 0, config.MaxInstances)
+	for i := config.BasePort + config.MaxInstances - 1; i >= config.BasePort; i-- {
+		ports = append(ports, i)
+	}
+
 	manager := &backendManager{
 		backends:     make(map[string]*Backend),
 		suffixLength: len(config.DomainSuffix),
-		currentPort:  config.BasePort,
-		maxPort:      config.BasePort + config.MaxInstances,
+		availPorts:   ports,
 		proxyPrefix:  template.Must(template.New("p").Parse(config.ProxyFormat)),
 		initCommand:  config.InitCommand,
 		notify:       make(chan *Backend),
