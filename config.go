@@ -13,6 +13,7 @@ type Configuration struct {
 	BasePort     int    // The base port number to start at
 	MaxInstances int    // No more than this many instances can be made
 	ProxyFormat  string
+	InitCommand  []string // The command we run to initialize backends
 }
 
 func ReadConfig() *Configuration {

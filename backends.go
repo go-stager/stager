@@ -5,22 +5,52 @@ import (
 	"fmt"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/exec"
 	"sync"
 	"text/template"
 )
 
+// A backend represents one possible instance we can be proxying to.
+// The public properties Port and Name can be used as configuration data.
 type Backend struct {
 	Port    int
 	Name    string
 	proxy   *httputil.ReverseProxy
 	running bool
+	command *exec.Cmd
 }
 
-// This will do the setup of the backend at some point.
-func (b *Backend) initialize() {
+// initialize starts the backend running.
+func (b *Backend) initialize(command []string) {
+	// setup prerequisite vars
+	environ := os.Environ()
+	environ = append(environ, fmt.Sprintf("STAGER_PORT=%d", b.Port), fmt.Sprintf("STAGER_NAME=%s", b.Name))
+
+	// Build the command
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Env = environ
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	b.command = cmd
 	b.running = true
+	go b.waiter()
 }
 
+// waiter runs in a goroutine waiting for process to end.
+func (b *Backend) waiter() {
+	b.command.Wait()
+	b.command = nil
+	b.running = false
+	fmt.Printf("Backend %s on port %d exited.\n", b.Name, b.Port)
+}
+
+// backendManager manages backends, allocating ports and backends as needed.
+// Use the function newBackendManager to initialize properly.
 type backendManager struct {
 	sync.Mutex
 	backends     map[string]*Backend
@@ -28,6 +58,7 @@ type backendManager struct {
 	currentPort  int
 	availPorts   []int
 	proxyPrefix  *template.Template
+	initCommand  []string
 }
 
 func (m *backendManager) get(domain string) *Backend {
@@ -53,7 +84,7 @@ func (m *backendManager) get(domain string) *Backend {
 
 		b.proxy = httputil.NewSingleHostReverseProxy(u)
 
-		go b.initialize()
+		go b.initialize(m.initCommand)
 
 	}
 	return m.backends[name]
@@ -88,6 +119,7 @@ func newBackendManager(config *Configuration) *backendManager {
 		suffixLength: len(config.DomainSuffix),
 		currentPort:  config.BasePort,
 		proxyPrefix:  template.Must(template.New("p").Parse(config.ProxyFormat)),
+		initCommand:  config.InitCommand,
 	}
 	return manager
 }
