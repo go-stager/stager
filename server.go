@@ -17,6 +17,7 @@ func buildHandler(backends *backendManager) http.HandlerFunc {
 		if err != nil {
 			writer.WriteHeader(500)
 			writer.Write([]byte("Got an internal error finding a backend: " + err.Error()))
+			return
 		}
 		switch backend.state {
 		case StateNew:
