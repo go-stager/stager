@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// Configuration holds the config for a stager instance.
+// This is usually filled from JSON, most likely from
+// calling ReadConfig.
 type Configuration struct {
 	DomainSuffix string // The suffix of the domain we're serving for
 	Listen       string // a host:port combination to bind to
@@ -38,16 +41,21 @@ func ReadConfig() *Configuration {
 	flag.Parse()
 
 	if *configFile != "" {
-		file, _ := os.Open(*configFile)
-		decoder := json.NewDecoder(file)
-		err := decoder.Decode(config)
-		if err != nil {
-			fmt.Println("error:", err)
-		}
+		ParseJSONConfig(config, *configFile)
 	}
 
 	if *listen != "" {
 		config.Listen = *listen
 	}
 	return config
+}
+
+// ParseJSONConfig will fill a config struct from a JSON config file.
+func ParseJSONConfig(config *Configuration, configFile string) {
+	file, _ := os.Open(configFile)
+	decoder := json.NewDecoder(file)
+	err := decoder.Decode(config)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 }
