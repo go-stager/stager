@@ -1,4 +1,4 @@
-![Stager Logo](http://i.stack.imgur.com/cLntT.png)
+![Stager Logo](http://go-stager.github.io/img/logo.png)
 
 Stager takes the pain out of staging changes to your development server.
 Instead of having a single instance that everyone uses for staging, Stager
