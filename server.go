@@ -16,27 +16,24 @@ func buildHandler(backends *backendManager) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		backend, err := backends.get(request.Host)
 		if err != nil {
-			writer.WriteHeader(500)
-			writer.Write([]byte("Got an internal error finding a backend: " + err.Error()))
+			simpleTextResponse(
+				writer, 500,
+				"Got an internal error finding a backend: "+err.Error(),
+			)
 			return
 		}
 		switch backend.state {
 		case StateNew:
-			writer.WriteHeader(200)
-			writer.Write([]byte("The backend you requested is being built. Check back momentarily."))
+			simpleTextResponse(writer, 200, "The backend you requested is being built. Check back momentarily.")
 		case StateStarted:
-			backend.LastReq = time.Now()
-			writer.WriteHeader(200)
-			writer.Write([]byte("The backend you requested is starting up. Check back momentarily."))
+			simpleTextResponse(writer, 200, "The backend you requested is starting up. Check back momentarily.")
 		case StateRunning:
 			backend.LastReq = time.Now()
 			backend.proxy.ServeHTTP(writer, request)
 		case StateFinished:
-			writer.WriteHeader(200)
-			writer.Write([]byte("The backend you requested is starting up. Check back momentarily."))
+			simpleTextResponse(writer, 200, "The backend you requested has finished. will be cleaning up.")
 		case StateErrored:
-			writer.WriteHeader(200)
-			writer.Write([]byte("The backend errored after startup. Check your log for reason code."))
+			simpleTextResponse(writer, 200, "The backend errored after startup. Check your log for reason code.")
 		}
 	}
 }

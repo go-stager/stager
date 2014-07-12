@@ -17,9 +17,9 @@ import (
 // A backend represents one possible instance we can be proxying to.
 // The public properties Port and Name can be used as configuration data.
 type Backend struct {
-	Port    int
-	Name    string
-	LastReq time.Time
+	Port    int       // The TCP port this instance uses.
+	Name    string    // The name or key of this instance.
+	LastReq time.Time // Last time this instance was requested
 	url     *url.URL
 	proxy   *httputil.ReverseProxy
 	state   State
