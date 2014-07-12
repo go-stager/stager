@@ -6,15 +6,15 @@ import (
 )
 
 func Serve(config *Configuration) {
-	backends := newBackendManager(config)
+	backends := NewBackendManager(config)
 	handler := buildHandler(backends)
 	http.ListenAndServe(config.Listen, handler)
 }
 
-func buildHandler(backends *backendManager) http.HandlerFunc {
+func buildHandler(backends *BackendManager) http.HandlerFunc {
 
 	return func(writer http.ResponseWriter, request *http.Request) {
-		backend, err := backends.get(request.Host)
+		backend, err := backends.Get(request.Host)
 		if err != nil {
 			simpleTextResponse(
 				writer, 500,

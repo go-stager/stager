@@ -27,8 +27,11 @@ type Backend struct {
 	notify  chan *Backend
 }
 
-// initialize starts the backend running.
-func (b *Backend) initialize(command []string) {
+// Start the backend running.
+// Will get the process started initialized and then return. Also spawns
+// two goroutines: one which keeps checking till the backend is accessible,
+// and the other which will wait till the process completes.
+func (b *Backend) Start(command []string) {
 	// setup prerequisite vars
 	environ := os.Environ()
 	environ = append(environ, fmt.Sprintf("STAGER_PORT=%d", b.Port), fmt.Sprintf("STAGER_NAME=%s", b.Name))
@@ -93,9 +96,9 @@ func (b *Backend) kill() {
 	}
 }
 
-// backendManager manages backends, allocating ports and backends as needed.
+// BackendManager manages backends, allocating ports and backends as needed.
 // Use the function newBackendManager to initialize properly.
-type backendManager struct {
+type BackendManager struct {
 	sync.Mutex
 	config       *Configuration
 	backends     map[string]*Backend
@@ -105,47 +108,52 @@ type backendManager struct {
 	notify       chan *Backend
 }
 
-func (m *backendManager) get(domain string) (b *Backend, err error) {
+// Get a backend by the domain name.
+func (m *BackendManager) Get(domain string) (b *Backend, err error) {
 	name := domain[:len(domain)-m.suffixLength]
 	b = m.backends[name]
 	if b == nil {
-		var port int
-		port, err = m.allocatePort()
-		if err != nil {
-			return
-		}
-		m.Lock()
-		b = &Backend{
-			Name:    name,
-			Port:    port,
-			LastReq: time.Now(),
-			notify:  m.notify,
-		}
-		m.backends[name] = b
-		m.Unlock()
-
-		buf := &bytes.Buffer{}
-		err = m.proxyPrefix.Execute(buf, b)
-		if err != nil {
-			return
-		}
-		rawurl := string(buf.Bytes())
-		b.url, err = url.Parse(rawurl)
-		if err != nil {
-			return
-		}
-		fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
-
-		b.proxy = httputil.NewSingleHostReverseProxy(b.url)
-
-		go b.initialize(m.config.InitCommand)
-
+		b, err = m.NewBackend(name)
 	}
 	return
 }
 
-/* Allocate a port number to be used for another backend. */
-func (m *backendManager) allocatePort() (int, error) {
+// NewBackend creates and starts the named backend.
+func (m *BackendManager) NewBackend(name string) (b *Backend, err error) {
+	port, err := m.AllocatePort()
+	if err != nil {
+		return
+	}
+	m.Lock()
+	b = &Backend{
+		Name:    name,
+		Port:    port,
+		LastReq: time.Now(),
+		notify:  m.notify,
+	}
+	m.backends[name] = b
+	m.Unlock()
+
+	buf := &bytes.Buffer{}
+	err = m.proxyPrefix.Execute(buf, b)
+	if err != nil {
+		return
+	}
+	rawurl := string(buf.Bytes())
+	b.url, err = url.Parse(rawurl)
+	if err != nil {
+		return
+	}
+	fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
+
+	b.proxy = httputil.NewSingleHostReverseProxy(b.url)
+
+	go b.Start(m.config.InitCommand)
+	return
+}
+
+// AllocatePort gives an available port number to be used by a backend.
+func (m *BackendManager) AllocatePort() (int, error) {
 	m.Lock()
 	defer m.Unlock()
 	l := len(m.availPorts)
@@ -158,15 +166,15 @@ func (m *backendManager) allocatePort() (int, error) {
 	}
 }
 
-// Return a port number to the available ports slice
-func (m *backendManager) returnPort(portNum int) {
+// ReturnPort makes a port number available for use by future backends.
+func (m *BackendManager) ReturnPort(portNum int) {
 	m.Lock()
 	m.availPorts = append(m.availPorts, portNum)
 	m.Unlock()
 }
 
 // watcher watches on the channel for things which happen
-func (m *backendManager) watcher() {
+func (m *BackendManager) watcher() {
 	tick := time.Tick(BackendIdleCheck)
 	for {
 		select {
@@ -177,7 +185,7 @@ func (m *backendManager) watcher() {
 				m.Lock()
 				delete(m.backends, backend.Name)
 				m.Unlock()
-				m.returnPort(backend.Port)
+				m.ReturnPort(backend.Port)
 			} else {
 				fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
 			}
@@ -195,14 +203,14 @@ func (m *backendManager) watcher() {
 	}
 }
 
-func newBackendManager(config *Configuration) *backendManager {
+func NewBackendManager(config *Configuration) *BackendManager {
 	// Make a slice of all available ports
 	ports := make([]int, 0, config.MaxInstances)
 	for i := config.BasePort + config.MaxInstances - 1; i >= config.BasePort; i-- {
 		ports = append(ports, i)
 	}
 
-	manager := &backendManager{
+	manager := &BackendManager{
 		config:       config,
 		backends:     make(map[string]*Backend),
 		suffixLength: len(config.DomainSuffix),
