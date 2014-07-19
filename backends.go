@@ -166,8 +166,8 @@ func (m *BackendManager) AllocatePort() (int, error) {
 	}
 }
 
-// ReturnPort makes a port number available for use by future backends.
-func (m *BackendManager) ReturnPort(portNum int) {
+// ReleasePort makes a port number available for use by future backends.
+func (m *BackendManager) ReleasePort(portNum int) {
 	m.Lock()
 	m.availPorts = append(m.availPorts, portNum)
 	m.Unlock()
@@ -185,7 +185,7 @@ func (m *BackendManager) watcher() {
 				m.Lock()
 				delete(m.backends, backend.Name)
 				m.Unlock()
-				m.ReturnPort(backend.Port)
+				m.ReleasePort(backend.Port)
 			} else {
 				fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
 			}
@@ -203,6 +203,9 @@ func (m *BackendManager) watcher() {
 	}
 }
 
+// NewBackendManager creates a manager which allocates and watches backends.
+// Running this will start a goroutine which watches the backends for status
+// changes, and return the newly allocated manager.
 func NewBackendManager(config *Configuration) *BackendManager {
 	// Make a slice of all available ports
 	ports := make([]int, 0, config.MaxInstances)
