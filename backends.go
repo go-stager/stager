@@ -32,6 +32,14 @@ type Backend struct {
 // two goroutines: one which keeps checking till the backend is accessible,
 // and the other which will wait till the process completes.
 func (b *Backend) Start(command []string) {
+	b.runCommand(command)
+	b.transition(StateStarted)
+	go b.startCheck()
+	go b.waiter()
+}
+
+// runCommand starts a command.
+func (b *Backend) runCommand(command []string) {
 	// setup prerequisite vars
 	environ := os.Environ()
 	environ = append(environ, fmt.Sprintf("STAGER_PORT=%d", b.Port), fmt.Sprintf("STAGER_NAME=%s", b.Name))
@@ -46,9 +54,6 @@ func (b *Backend) Start(command []string) {
 		panic(err)
 	}
 	b.command = cmd
-	b.transition(StateStarted)
-	go b.startCheck()
-	go b.waiter()
 }
 
 func (b *Backend) transition(state State) {
@@ -86,8 +91,10 @@ func (b *Backend) waiter() {
 	b.transition(StateFinished)
 }
 
-// kill the running process
-func (b *Backend) kill() {
+// Kill the running process.
+// This will send the os.Interrupt signal to the process. If the process is not
+// in a running or started state, this will not work as we wish.
+func (b *Backend) Kill() {
 	if b.state == StateStarted || b.state == StateRunning {
 		proc := b.command.Process
 		if proc != nil {
@@ -119,12 +126,18 @@ func (m *BackendManager) Get(domain string) (b *Backend, err error) {
 }
 
 // NewBackend creates and starts the named backend.
+// The backend will be assigned a port using AllocatePort, and
+// the process will be launched.
+//
+// If the port cannot be allocated or any error occurs in the startup, it
+// is returned as err.
 func (m *BackendManager) NewBackend(name string) (b *Backend, err error) {
-	port, err := m.AllocatePort()
+	m.Lock()
+	port, err := m.reallyAllocatePort()
 	if err != nil {
+		m.Unlock()
 		return
 	}
-	m.Lock()
 	b = &Backend{
 		Name:    name,
 		Port:    port,
@@ -153,9 +166,15 @@ func (m *BackendManager) NewBackend(name string) (b *Backend, err error) {
 }
 
 // AllocatePort gives an available port number to be used by a backend.
-func (m *BackendManager) AllocatePort() (int, error) {
+// If there are not any available ports, port is 0 and err is given.
+func (m *BackendManager) AllocatePort() (port int, err error) {
 	m.Lock()
-	defer m.Unlock()
+	port, err = m.reallyAllocatePort()
+	m.Unlock()
+	return
+}
+
+func (m *BackendManager) reallyAllocatePort() (int, error) {
 	l := len(m.availPorts)
 	if l > 0 {
 		port := m.availPorts[l-1]
@@ -169,8 +188,12 @@ func (m *BackendManager) AllocatePort() (int, error) {
 // ReleasePort makes a port number available for use by future backends.
 func (m *BackendManager) ReleasePort(portNum int) {
 	m.Lock()
-	m.availPorts = append(m.availPorts, portNum)
+	m.reallyReleasePort(portNum)
 	m.Unlock()
+}
+
+func (m *BackendManager) reallyReleasePort(portNum int) {
+	m.availPorts = append(m.availPorts, portNum)
 }
 
 // watcher watches on the channel for things which happen
@@ -184,8 +207,9 @@ func (m *BackendManager) watcher() {
 				fmt.Printf("Backend %s, state finished\n", backend.Name)
 				m.Lock()
 				delete(m.backends, backend.Name)
+				m.reallyReleasePort(backend.Port)
 				m.Unlock()
-				m.ReleasePort(backend.Port)
+
 			} else {
 				fmt.Printf("Backend %s, state %d\n", backend.Name, backend.state)
 			}
@@ -195,7 +219,7 @@ func (m *BackendManager) watcher() {
 			for _, backend := range m.backends {
 				if time.Since(backend.LastReq) > threshold {
 					fmt.Printf("Killing idle worker %s\n", backend.Name)
-					go backend.kill()
+					go backend.Kill()
 				}
 			}
 			m.Unlock()

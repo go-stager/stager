@@ -11,14 +11,13 @@ import (
 )
 
 // Configuration holds the config for a stager instance.
-// This is usually filled from JSON, most likely from
-// calling ReadConfig.
+// This is usually filled from JSON, most likely from calling ReadConfig.
 type Configuration struct {
-	DomainSuffix string // The suffix of the domain we're serving for
-	Listen       string // a host:port combination to bind to
-	BasePort     int    // The base port number to start at
-	MaxInstances int    // No more than this many instances can be made
-	ProxyFormat  string
+	DomainSuffix string   // The suffix of the domain we're serving for
+	Listen       string   // a host:port combination to bind to
+	BasePort     int      // The base port number to start at
+	MaxInstances int      // No more than this many instances can be made
+	ProxyFormat  string   // Format template for building the proxy. advanced usage.
 	InitCommand  []string // The command we run to initialize backends
 	IdleTime     string   // Time duration after which an idle process is killed. runs through time.ParseDuration.
 }
@@ -33,6 +32,9 @@ func (c Configuration) IdleTimeDuration() time.Duration {
 	return d
 }
 
+// DefaultConf is configuration defaults.
+// The defaults are used for any key where it is omitted from both JSON and
+// command-line config in the default application.
 var DefaultConf = Configuration{
 	DomainSuffix: ".stager:8000",
 	Listen:       "127.0.0.1:8000",
@@ -43,8 +45,7 @@ var DefaultConf = Configuration{
 	IdleTime:     "5m",
 }
 
-// ReadConfig gets configuration from both cmdline and JSON
-// It allocates and returns a configuration struct.
+// ReadConfig gets from both cmdline and JSON returning a new Configuration.
 func ReadConfig() *Configuration {
 	// Set up the eventual output configuration
 	conf := &Configuration{}
@@ -66,6 +67,8 @@ func ReadConfig() *Configuration {
 	return conf
 }
 
+// ParseCommandConfig will fill a config struct from command-line options.
+// The returned value is the name of a JSON config file to parse.
 func ParseCommandConfig(config *Configuration) string {
 	configFile := flag.String("config", "", "JSON Config file to parse")
 	flag.StringVar(&config.Listen, "listen", config.Listen, "Listen on host:port")
