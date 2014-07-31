@@ -1,6 +1,8 @@
 package stager
 
 import (
+	"bytes"
+	"html/template"
 	"net/http"
 	"strconv"
 )
@@ -16,4 +18,15 @@ func beginResponse(w http.ResponseWriter, status int, content_type string, conte
 func simpleTextResponse(w http.ResponseWriter, status int, output string) {
 	beginResponse(w, status, "text/plain; charset=utf-8", len(output))
 	w.Write([]byte(output))
+}
+
+func render(t *template.Template, w http.ResponseWriter, data interface{}) {
+	buf := &bytes.Buffer{}
+	err := t.Execute(buf, data)
+	if err != nil {
+		simpleTextResponse(w, http.StatusInternalServerError, "Error rendering template")
+		return
+	}
+	beginResponse(w, http.StatusOK, "text/html", buf.Len())
+	w.Write(buf.Bytes())
 }

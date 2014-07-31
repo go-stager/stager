@@ -66,6 +66,7 @@ func ReadConfig() *Configuration {
 	}
 	// Overwrite JSON with any command-line args.
 	copyConfig(*cmdConf, conf, false)
+	FindResourceDir(conf)
 	fmt.Printf("%+v", conf)
 	return conf
 }
@@ -139,13 +140,13 @@ func FindResourceDir(config *Configuration) {
 	for _, d := range ResourceDirsSearchPath {
 		candidates := []string{
 			filepath.Join(d, StaticDirName),
-			filepath.Join(d, TemplateDirName),
+			filepath.Join(d, TemplatesDirName),
 		}
 		exists := true
 		for _, target := range candidates {
-			stat, err := os.Stat()
+			stat, err := os.Stat(target)
 			if err != nil || !stat.IsDir() {
-				exists := false
+				exists = false
 			}
 		}
 		if exists {

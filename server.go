@@ -1,6 +1,7 @@
 package stager
 
 import (
+	"html/template"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 func Serve(config *Configuration) {
 	backends := NewBackendManager(config)
-	backendHandler := BuildBackendHandler(backends)
+	backendHandler := BuildBackendHandler(config, backends)
 	apiHandler := BuildApiHandler(config, backends)
 	muxHandler := BuildStagerRoot(config, backendHandler, apiHandler)
 	http.ListenAndServe(config.Listen, muxHandler)
@@ -28,7 +29,8 @@ func BuildStagerRoot(config *Configuration, backendHandler http.Handler, apiHand
 	return mux
 }
 
-func BuildBackendHandler(backends *BackendManager) http.HandlerFunc {
+func BuildBackendHandler(config *Configuration, backends *BackendManager) http.HandlerFunc {
+	loading := getLoadingTemplate(config)
 	return func(writer http.ResponseWriter, request *http.Request) {
 		backend, err := backends.Get(request.Host)
 		if err != nil {
@@ -40,9 +42,11 @@ func BuildBackendHandler(backends *BackendManager) http.HandlerFunc {
 		}
 		switch backend.state {
 		case StateNew:
-			simpleTextResponse(writer, 200, "The backend you requested is being built. Check back momentarily.")
+			render(loading, writer, backend)
+
 		case StateStarted:
-			simpleTextResponse(writer, 200, "The backend you requested is starting up. Check back momentarily.")
+			render(loading, writer, backend)
+			//simpleTextResponse(writer, 200, "The backend you requested is starting up. Check back momentarily.")
 		case StateRunning:
 			backend.LastReq = time.Now()
 			backend.proxy.ServeHTTP(writer, request)
@@ -52,4 +56,9 @@ func BuildBackendHandler(backends *BackendManager) http.HandlerFunc {
 			simpleTextResponse(writer, 200, "The backend errored after startup. Check your log for reason code.")
 		}
 	}
+}
+
+func getLoadingTemplate(config *Configuration) *template.Template {
+	fname := filepath.Join(config.ResourceDir, TemplatesDirName, "loading.html")
+	return template.Must(template.ParseFiles(fname))
 }
