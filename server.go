@@ -54,7 +54,7 @@ func BuildBackendHandler(config *Configuration, backends *BackendManager) http.H
 				}
 				return
 			}
-			render(loading, writer, backend)
+			render(loading, writer, tdata{"backend": backend})
 		case StateRunning:
 			backend.LastReq = time.Now()
 			backend.proxy.ServeHTTP(writer, request)
@@ -70,3 +70,5 @@ func getLoadingTemplate(config *Configuration) *template.Template {
 	fname := filepath.Join(config.ResourceDir, TemplatesDirName, "loading.html")
 	return template.Must(template.ParseFiles(fname))
 }
+
+type tdata map[string]interface{}
