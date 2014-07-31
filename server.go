@@ -31,6 +31,7 @@ func BuildStagerRoot(config *Configuration, backendHandler http.Handler, apiHand
 
 func BuildBackendHandler(config *Configuration, backends *BackendManager) http.HandlerFunc {
 	loading := getLoadingTemplate(config)
+	holdFor := config.HoldForDuration()
 	return func(writer http.ResponseWriter, request *http.Request) {
 		backend, err := backends.Get(request.Host)
 		if err != nil {
@@ -41,12 +42,19 @@ func BuildBackendHandler(config *Configuration, backends *BackendManager) http.H
 			return
 		}
 		switch backend.state {
-		case StateNew:
+		case StateNew, StateStarted:
+			if holdFor != 0 && request.Method != "GET" {
+				// on non-GET requests, wait until we have a ready backend to serve.
+				select {
+				case <-backend.starter:
+					// If we're here, it's because the starter channel signaled. Serve us.
+					backend.proxy.ServeHTTP(writer, request)
+				case <-time.After(holdFor):
+					simpleTextResponse(writer, http.StatusGatewayTimeout, "Backend did not come up within the time limit.")
+				}
+				return
+			}
 			render(loading, writer, backend)
-
-		case StateStarted:
-			render(loading, writer, backend)
-			//simpleTextResponse(writer, 200, "The backend you requested is starting up. Check back momentarily.")
 		case StateRunning:
 			backend.LastReq = time.Now()
 			backend.proxy.ServeHTTP(writer, request)

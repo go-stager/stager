@@ -25,6 +25,7 @@ type Backend struct {
 	state   State
 	command *exec.Cmd
 	notify  chan *Backend
+	starter chan int
 }
 
 // Start the backend running.
@@ -74,6 +75,7 @@ func (b *Backend) startCheck() {
 			fmt.Printf("Backend %s got a >5xx status code\n", b.Name)
 		} else {
 			b.transition(StateRunning)
+			close(b.starter)
 		}
 		time.Sleep(BackendCheckDelay)
 	}
@@ -160,6 +162,7 @@ func (m *BackendManager) NewBackend(name string) (b *Backend, err error) {
 	fmt.Printf("making new instance %s on port %d with backend url %s\n", name, b.Port, rawurl)
 
 	b.proxy = httputil.NewSingleHostReverseProxy(b.url)
+	b.starter = make(chan int)
 
 	go b.Start(m.config.InitCommand)
 	return

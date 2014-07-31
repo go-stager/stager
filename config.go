@@ -22,12 +22,21 @@ type Configuration struct {
 	InitCommand  []string // The command we run to initialize backends
 	IdleTime     string   // Time duration after which an idle process is killed. runs through time.ParseDuration.
 	ResourceDir  string   // Where to find stager's resources: static and templates
+	HoldFor      string   // How long to hold for (as a time.Duration)
 }
 
 // IdleTimeDuration gets the idle time as a time.Duration.
 // It allows you to specify the idle time as a duration like "5m" or "300s"
 func (c Configuration) IdleTimeDuration() time.Duration {
 	d, err := time.ParseDuration(c.IdleTime)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+func (c Configuration) HoldForDuration() time.Duration {
+	d, err := time.ParseDuration(c.HoldFor)
 	if err != nil {
 		panic(err)
 	}
@@ -46,6 +55,7 @@ var DefaultConf = Configuration{
 	InitCommand:  []string{"bash", "stager_script.sh"},
 	IdleTime:     "5m",
 	ResourceDir:  "",
+	HoldFor:      "30s",
 }
 
 // ReadConfig gets from both cmdline and JSON returning a new Configuration.
@@ -82,6 +92,7 @@ func ParseCommandConfig(config *Configuration) string {
 	flag.StringVar(&config.IdleTime, "idle_time", config.IdleTime, "Idle time (duration)")
 	flag.Var((*commandValue)(&config.InitCommand), "init_command", "Command to run to start instance")
 	flag.StringVar(&config.ResourceDir, "resource_dir", config.ResourceDir, "Resource Dir to find static/templates. If omitted, will search in common locations.")
+	flag.StringVar(&config.HoldFor, "hold_for", config.HoldFor, "How long to hold the connection for startup. 0 to disable.")
 	// set the values back to things we can tell are blank before parsing.
 	copyConfig(Configuration{}, config, true)
 	flag.Parse()
@@ -107,6 +118,7 @@ func copyConfig(src Configuration, dest *Configuration, force bool) {
 	copyConfigString(src.ProxyFormat, &dest.ProxyFormat, force)
 	copyConfigString(src.IdleTime, &dest.IdleTime, force)
 	copyConfigString(src.ResourceDir, &dest.ResourceDir, force)
+	copyConfigString(src.HoldFor, &dest.HoldFor, force)
 	if force || len(src.InitCommand) > 0 {
 		dest.InitCommand = src.InitCommand
 	}
@@ -119,6 +131,12 @@ func copyConfigString(src string, dest *string, force bool) {
 }
 
 func copyConfigInt(src int, dest *int, force bool) {
+	if force || src != 0 {
+		*dest = src
+	}
+}
+
+func copyConfigDuration(src time.Duration, dest *time.Duration, force bool) {
 	if force || src != 0 {
 		*dest = src
 	}
