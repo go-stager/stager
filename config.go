@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ type Configuration struct {
 	ProxyFormat  string   // Format template for building the proxy. advanced usage.
 	InitCommand  []string // The command we run to initialize backends
 	IdleTime     string   // Time duration after which an idle process is killed. runs through time.ParseDuration.
+	ResourceDir  string   // Where to find stager's resources: static and templates
 }
 
 // IdleTimeDuration gets the idle time as a time.Duration.
@@ -43,6 +45,7 @@ var DefaultConf = Configuration{
 	ProxyFormat:  "http://127.0.0.1:{{.Port}}",
 	InitCommand:  []string{"bash", "stager_script.sh"},
 	IdleTime:     "5m",
+	ResourceDir:  "",
 }
 
 // ReadConfig gets from both cmdline and JSON returning a new Configuration.
@@ -77,7 +80,7 @@ func ParseCommandConfig(config *Configuration) string {
 	flag.IntVar(&config.MaxInstances, "max_instances", config.MaxInstances, "Maximum Instances")
 	flag.StringVar(&config.IdleTime, "idle_time", config.IdleTime, "Idle time (duration)")
 	flag.Var((*commandValue)(&config.InitCommand), "init_command", "Command to run to start instance")
-
+	flag.StringVar(&config.ResourceDir, "resource_dir", config.ResourceDir, "Resource Dir to find static/templates. If omitted, will search in common locations.")
 	// set the values back to things we can tell are blank before parsing.
 	copyConfig(Configuration{}, config, true)
 	flag.Parse()
@@ -102,6 +105,7 @@ func copyConfig(src Configuration, dest *Configuration, force bool) {
 	copyConfigInt(src.MaxInstances, &dest.MaxInstances, force)
 	copyConfigString(src.ProxyFormat, &dest.ProxyFormat, force)
 	copyConfigString(src.IdleTime, &dest.IdleTime, force)
+	copyConfigString(src.ResourceDir, &dest.ResourceDir, force)
 	if force || len(src.InitCommand) > 0 {
 		dest.InitCommand = src.InitCommand
 	}
@@ -129,4 +133,32 @@ func (c *commandValue) String() string {
 func (c *commandValue) Set(s string) error {
 	*c = strings.Split(s, " ")
 	return nil
+}
+
+func FindResourceDir(config *Configuration) {
+	for _, d := range ResourceDirsSearchPath {
+		candidates := []string{
+			filepath.Join(d, StaticDirName),
+			filepath.Join(d, TemplateDirName),
+		}
+		exists := true
+		for _, target := range candidates {
+			stat, err := os.Stat()
+			if err != nil || !stat.IsDir() {
+				exists := false
+			}
+		}
+		if exists {
+			config.ResourceDir = d
+		}
+	}
+}
+
+// Static directories to search
+var ResourceDirsSearchPath = []string{
+	".",
+	"/usr/share/stager",
+	"/usr/local/stager",
+	"/usr/local/share/stager",
+	"./src/gopkg.in/stager.v0",
 }

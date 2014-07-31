@@ -21,3 +21,6 @@ const (
 	BackendCheckAttempts = 1000
 	BackendIdleCheck     = 10 * time.Second
 )
+
+const StaticDirName = "static"
+const TemplatesDirName = "templates"
