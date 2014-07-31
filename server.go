@@ -2,22 +2,38 @@ package stager
 
 import (
 	"net/http"
+	"path/filepath"
 	"time"
 )
 
 func Serve(config *Configuration) {
 	backends := NewBackendManager(config)
-	handler := buildHandler(backends)
-	http.ListenAndServe(config.Listen, handler)
+	backendHandler := BuildBackendHandler(backends)
+	apiHandler := BuildApiHandler(config, backends)
+	muxHandler := BuildStagerRoot(config, backendHandler, apiHandler)
+	http.ListenAndServe(config.Listen, muxHandler)
 }
 
-func buildHandler(backends *BackendManager) http.HandlerFunc {
+// Use BuildStagerRoot to create the root handler for stager.
+// The root handler sends API and static requests their specific ways, and
+// sends everything else along to the backend handler.
+func BuildStagerRoot(config *Configuration, backendHandler http.Handler, apiHandler http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	staticDir := filepath.Clean(filepath.Join(config.ResourceDir, StaticDirName))
+	static := "/_stager/static/"
+	mux.Handle(static, http.StripPrefix(static, http.FileServer(http.Dir(staticDir))))
+	api := "/_stager/api/"
+	mux.Handle(api, http.StripPrefix(api, apiHandler))
+	mux.Handle("/", backendHandler)
+	return mux
+}
 
+func BuildBackendHandler(backends *BackendManager) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		backend, err := backends.Get(request.Host)
 		if err != nil {
 			simpleTextResponse(
-				writer, 500,
+				writer, http.StatusInternalServerError,
 				"Got an internal error finding a backend: "+err.Error(),
 			)
 			return

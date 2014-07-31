@@ -24,9 +24,9 @@
                 // If the instance is ready, refresh
                 if(request.responseText == 'true')
                     location.reload();
-                // ...otherwise, check again in two seconds
+                // ...otherwise, check again in half a second.
                 else
-                    setTimeout(poll, 2000);
+                    setTimeout(poll, 500);
             }
         }
     };
